@@ -3,7 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>席替えメーカー</title>
+    
+    <!-- 検索エンジン最適化 (SEO) 設定 -->
+    <title>席替えメーカー | 簡単・便利・面白い席替え自動生成ツール</title>
+    <meta name="description" content="ブラウザで今すぐ使える無料の席替えメーカーです。参加者名を入力するだけで自動で席替えを行い、ドラムロール演出で盛り上げます。前席希望者の設定や全画面表示、表出力にも対応。">
+    <meta name="keywords" content="席替え,席替えメーカー,自動生成,無料,クラス替え,座席表,ツール">
+    
+    <!-- SNSシェア時の表示設定 (OGP) -->
+    <meta property="og:title" content="席替えメーカー | 簡単・便利・面白い席替え自動生成ツール">
+    <meta property="og:description" content="ドラムロール付きで盛り上がる席替えアプリ！前席希望者の設定も可能です。">
+    <meta property="og:type" content="website">
+    
     <style>
         :root {
             --primary: #4a90e2;
@@ -215,7 +225,6 @@
             return alert(`席が足りません！\n現在の人数: ${namesData.all.length}人\n使用可能な席: ${activeSeats.length}席`);
         }
 
-        // スタート時に即時ロック
         isLocked = true;
         document.getElementById('nameList').disabled = true;
         document.getElementById('priorityNameList').disabled = true;
