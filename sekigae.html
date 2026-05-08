@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>席替えメーカー</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --secondary: #f39c12;
+            --danger: #e74c3c;
+            --success: #27ae60;
+            --bg: #f8f9fa;
+        }
+        body { font-family: "Helvetica Neue", Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 20px; }
+        
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
+
+        h1 { text-align: center; color: var(--primary); margin-top: 10px; }
+        
+        .setup-section { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        
+        .names-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        
+        .input-group { margin-bottom: 10px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85em; color: #333; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; outline: none; }
+        textarea { height: 120px; resize: vertical; }
+        
+        input:disabled, textarea:disabled { background-color: #f0f0f0; color: #888; cursor: not-allowed; border-color: #ccc; }
+
+        .controls { text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        button { padding: 10px 25px; font-size: 1rem; border: none; border-radius: 25px; cursor: pointer; transition: 0.3s; font-weight: bold; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-start { background: var(--primary); color: white; }
+        .btn-full { background: #7f8c8d; color: white; }
+        .btn-export { background: #27ae60; color: white; }
+        .btn-mute { background: var(--success); color: white; min-width: 140px; }
+        
+        #seating-chart-area { background: white; padding: 20px; position: relative; overflow: hidden; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center;}
+        
+        .fs-controls { display: none; position: absolute; bottom: 30px; gap: 15px; z-index: 110; }
+
+        #seating-chart-area:fullscreen, #seating-chart-area:-webkit-full-screen {
+            width: 100vw; height: 100vh; background: white; padding: 0; margin: 0;
+        }
+        #seating-chart-area:fullscreen .fs-controls, #seating-chart-area:-webkit-full-screen .fs-controls {
+            display: flex;
+        }
+
+        .blackboard { width: 60%; max-width: 600px; margin: 0 auto 30px; background: #2c3e50; color: white; text-align: center; padding: 15px; border-radius: 4px; font-weight: bold; }
+        
+        .grid-container { display: grid; gap: 10px; justify-content: center; }
+        
+        .seat { width: 140px; height: 60px; border: 2px solid #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1.2rem; font-weight: bold; background: white; cursor: pointer; word-break: break-all; padding: 5px; box-sizing: border-box; }
+        
+        .seat.disabled { background-color: #e0e0e0 !important; border-style: dashed; color: #aaa; cursor: default; }
+        .seat.priority { border-color: var(--secondary); background-color: #fff9f0; }
+
+        .seat.shuffling { color: var(--primary); }
+
+        .flash-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 100; }
+        .flash-active { animation: flash-white 0.6s ease-out; }
+        @keyframes flash-white { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
+
+        .seat.just-decided { animation: highlight-pop 0.8s ease-out; border-color: #ffeb3b; box-shadow: 0 0 20px #ffeb3b; z-index: 10; }
+        @keyframes highlight-pop { 0% { transform: scale(1.1); filter: brightness(1.5); } 100% { transform: scale(1); filter: brightness(1); } }
+
+        .legend { font-size: 0.8rem; text-align: center; margin-top: 20px; color: #666; }
+    </style>
+</head>
+<body>
+
+<audio id="audioDrumRoll" src="ドラムロール.mp3" preload="auto" loop></audio>
+<audio id="audioRollFinish" src="ロールの閉め.mp3" preload="auto"></audio>
+
+<div class="container" id="mainContainer">
+    <h1>席替えメーカー</h1>
+
+    <div class="setup-section">
+        <div class="names-container">
+            <div class="names-input">
+                <label>参加者</label>
+                <textarea id="nameList"></textarea>
+            </div>
+            <div class="names-input">
+                <label>前席希望者</label>
+                <textarea id="priorityNameList"></textarea>
+            </div>
+        </div>
+        
+        <div class="grid-config">
+            <div class="input-group">
+                <label>座席レイアウト (横 × 縦)</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="number" id="cols" value="6" min="1" onchange="createGrid()">
+                    <input type="number" id="rows" value="7" min="1" onchange="createGrid()">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>前方エリアとして扱う行数</label>
+                <input type="number" id="frontRowLimit" value="1" min="0" onchange="createGrid()">
+                <small style="color: #666; font-size: 0.75rem;">※オレンジ枠の席に優先的に配置されます</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-full" onclick="toggleFullscreen()">座席の全画面表示</button>
+        <button class="btn-start start-trigger" onclick="startShuffle()">スタート！</button>
+        <button class="btn-export" onclick="exportTable()">表出力(コピペ用)</button>
+        <button class="btn-mute" id="muteBtn" onclick="toggleMute()">🔊 効果音：あり</button>
+    </div>
+
+    <div id="seating-chart-area">
+        <div class="flash-overlay" id="flashOverlay"></div>
+        <div class="blackboard">教壇 / 黒板</div>
+        <div id="gridContainer" class="grid-container"></div>
+        <div class="legend" id="stats"></div>
+
+        <div class="fs-controls">
+            <button class="btn-start start-trigger" onclick="startShuffle()">スタート！</button>
+            <button class="btn-full" onclick="toggleFullscreen()">解除</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.addEventListener('beforeunload', (e) => { e.preventDefault(); e.returnValue = ''; });
+
+    let seats = [];
+    let finalResult = [];
+    let isShuffling = false;
+    let isLocked = false;
+    let isMuted = false;
+
+    const drumRoll = document.getElementById('audioDrumRoll');
+    const rollFinish = document.getElementById('audioRollFinish');
+
+    window.onload = createGrid;
+
+    function toggleMute() {
+        isMuted = !isMuted;
+        const btn = document.getElementById('muteBtn');
+        btn.innerText = isMuted ? "🔇 効果音：なし" : "🔊 効果音：あり";
+        btn.style.background = isMuted ? "#e74c3c" : "#27ae60";
+    }
+
+    function createGrid() {
+        if (isLocked) return;
+        const previousStatuses = seats.map(s => s.active);
+        const rows = parseInt(document.getElementById('rows').value) || 1;
+        const cols = parseInt(document.getElementById('cols').value) || 1;
+        const frontLimit = parseInt(document.getElementById('frontRowLimit').value) || 0;
+        const container = document.getElementById('gridContainer');
+        
+        container.style.gridTemplateColumns = `repeat(${cols}, 140px)`;
+        container.innerHTML = '';
+        
+        const newSeats = [];
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const idx = r * cols + c;
+                const isFront = r < frontLimit;
+                const isActive = (idx < previousStatuses.length) ? previousStatuses[idx] : true;
+
+                const div = document.createElement('div');
+                div.className = `seat ${isFront ? 'priority' : ''}`;
+                if (!isActive) div.classList.add('disabled');
+                
+                div.onclick = () => toggleSeat(idx);
+                container.appendChild(div);
+                newSeats.push({ id: idx, active: isActive, isFront, element: div });
+            }
+        }
+        seats = newSeats;
+        updateStats();
+    }
+
+    function toggleSeat(id) {
+        if (isShuffling || isLocked) return;
+        const seat = seats[id];
+        seat.active = !seat.active;
+        seat.element.classList.toggle('disabled', !seat.active);
+        updateStats();
+    }
+
+    function updateStats() {
+        const activeCount = seats.filter(s => s.active).length;
+        const { all } = getNames();
+        document.getElementById('stats').innerText = `有効座席: ${activeCount}席 / 合計人数: ${all.length}名`;
+    }
+
+    function getNames() {
+        let reg = document.getElementById('nameList').value.split('\n').map(n => n.trim()).filter(n => n !== "");
+        let pri = document.getElementById('priorityNameList').value.split('\n').map(n => n.trim()).filter(n => n !== "");
+        
+        if (reg.length === 0 && pri.length === 0) {
+            const activeCount = seats.filter(s => s.active).length;
+            for (let i = 1; i <= activeCount; i++) {
+                reg.push(i.toString());
+            }
+        }
+        
+        return { regular: reg, priority: pri, all: [...pri, ...reg] };
+    }
+
+    function startShuffle() {
+        if (isShuffling || isLocked) return;
+        
+        const namesData = getNames();
+        const activeSeats = seats.filter(s => s.active);
+        
+        if (namesData.all.length > activeSeats.length) {
+            return alert(`席が足りません！\n現在の人数: ${namesData.all.length}人\n使用可能な席: ${activeSeats.length}席`);
+        }
+
+        // スタート時に即時ロック
+        isLocked = true;
+        document.getElementById('nameList').disabled = true;
+        document.getElementById('priorityNameList').disabled = true;
+        document.getElementById('cols').disabled = true;
+        document.getElementById('rows').disabled = true;
+        document.getElementById('frontRowLimit').disabled = true;
+
+        isShuffling = true;
+        
+        if (!isMuted) {
+            drumRoll.currentTime = 0;
+            drumRoll.play();
+        }
+
+        document.querySelectorAll('.start-trigger').forEach(b => b.style.display = 'none');
+
+        calculatePlacement(namesData, activeSeats);
+
+        const duration = 4000;
+        const startTime = Date.now();
+        let lastUpdateTime = startTime;
+        
+        const baseInterval = 40;
+        const maxInterval = 600;
+        const maxNumber = seats.length;
+
+        activeSeats.forEach(s => {
+            s.element.classList.add('shuffling');
+            s.element.classList.remove('just-decided');
+        });
+
+        const tick = () => {
+            const now = Date.now();
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            const currentInterval = baseInterval + (maxInterval - baseInterval) * Math.pow(progress, 3);
+
+            if (now - lastUpdateTime >= currentInterval && elapsed < duration) {
+                activeSeats.forEach(s => {
+                    s.element.innerText = Math.floor(Math.random() * maxNumber) + 1;
+                });
+                lastUpdateTime = now;
+            }
+
+            if (elapsed < duration) {
+                requestAnimationFrame(tick);
+            } else {
+                finishShuffle(activeSeats);
+            }
+        };
+        
+        requestAnimationFrame(tick);
+    }
+
+    function calculatePlacement(namesData, activeSeats) {
+        finalResult = [];
+        const shuffleArr = (arr) => arr.sort(() => Math.random() - 0.5);
+
+        let pNames = shuffleArr([...namesData.priority]);
+        let rNames = shuffleArr([...namesData.regular]);
+        
+        let fSeats = shuffleArr(activeSeats.filter(s => s.isFront));
+        let bSeats = shuffleArr(activeSeats.filter(s => !s.isFront));
+
+        while(pNames.length > 0 && fSeats.length > 0) {
+            finalResult.push({ id: fSeats.pop().id, name: pNames.pop() });
+        }
+        while(pNames.length > 0 && bSeats.length > 0) {
+            finalResult.push({ id: bSeats.pop().id, name: pNames.pop() });
+        }
+        let remainingSeats = shuffleArr([...fSeats, ...bSeats]);
+        rNames.forEach((name, i) => {
+            if(remainingSeats[i]) finalResult.push({ id: remainingSeats[i].id, name });
+        });
+    }
+
+    function finishShuffle(activeSeats) {
+        drumRoll.pause();
+
+        if (!isMuted) {
+            rollFinish.currentTime = 0;
+            rollFinish.play();
+        }
+        document.getElementById('flashOverlay').classList.add('flash-active');
+        
+        activeSeats.forEach(s => {
+            const res = finalResult.find(r => r.id === s.id);
+            s.element.innerText = res ? res.name : "";
+            s.element.classList.remove('shuffling');
+            s.element.classList.add('just-decided');
+        });
+
+        setTimeout(() => {
+            document.getElementById('flashOverlay').classList.remove('flash-active');
+        }, 600);
+
+        isShuffling = false;
+    }
+
+    function toggleFullscreen() {
+        const el = document.getElementById('seating-chart-area');
+        const isFS = document.fullscreenElement || document.webkitFullscreenElement;
+        if (!isFS) {
+            if (el.requestFullscreen) el.requestFullscreen();
+            else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+    }
+
+    function exportTable() {
+        if (!isLocked && finalResult.length === 0) return alert("まだ席替えが行われていません。");
+        const rows = parseInt(document.getElementById('rows').value) || 1;
+        const cols = parseInt(document.getElementById('cols').value) || 1;
+        let tableContent = "";
+        for (let r = 0; r < rows; r++) {
+            tableContent += `<tr>`;
+            for (let c = 0; c < cols; c++) {
+                const seatId = r * cols + c;
+                const seat = seats.find(s => s.id === seatId);
+                const res = finalResult.find(r => r.id === seatId);
+                tableContent += (seat && seat.active) ? `<td>${res ? res.name : ""}</td>` : `<td style="background:#eee;"></td>`;
+            }
+            tableContent += `</tr>`;
+        }
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{font-family:sans-serif;padding:20px;}table{border-collapse:collapse;width:100%;text-align:center;}td{border:1px solid #000;padding:15px;}</style></head><body><h2>席替え結果</h2><table>${tableContent}</table></body></html>`;
+        const blob = new Blob([html], { type: 'text/html' });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+    }
+</script>
+</body>
+</html>
