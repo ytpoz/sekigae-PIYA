@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>席替えピーヤ | 簡単・便利・面白い席替え自動生成ツール</title>
+    <meta name="description" content="ブラウザで今すぐ使える無料の席替えメーカーです。参加者名を入力するだけで自動で席替えを行い、ドラムロール演出で盛り上げます。前席希望者の設定や全画面表示、表出力にも対応。">
+    <meta name="keywords" content="席替え,席替えメーカー,自動生成,無料,クラス替え,座席表,ツール">
+    
+    <meta property="og:title" content="席替えメーカー | 簡単・便利・面白い席替え自動生成ツール">
+    <meta property="og:description" content="ドラムロール付きで盛り上がる席替えアプリ！前席希望者の設定も可能です。">
+    <meta property="og:type" content="website">
+    
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --secondary: #f39c12;
+            --danger: #e74c3c;
+            --success: #27ae60;
+            --bg: #f8f9fa;
+        }
+        body { font-family: "Helvetica Neue", Arial, sans-serif; background-color: var(--bg); margin: 0; padding: 10px; }
+        
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; }
+
+        h1 { text-align: center; color: var(--primary); margin: 10px 0; font-size: 1.5rem; }
+        
+        .setup-section { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        
+        /* PCでは横並び */
+        @media (min-width: 768px) {
+            .setup-section { display: grid; grid-template-columns: 1.2fr 1fr; }
+        }
+
+        .names-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        .input-group { margin-bottom: 10px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.85em; color: #333; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; outline: none; font-size: 14px; }
+        textarea { height: 100px; resize: vertical; }
+        
+        input:disabled, textarea:disabled { background-color: #f0f0f0; color: #888; cursor: not-allowed; }
+
+        .controls { text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+        button { padding: 10px 15px; font-size: 0.9rem; border: none; border-radius: 25px; cursor: pointer; transition: 0.3s; font-weight: bold; }
+        .btn-start { background: var(--primary); color: white; }
+        .btn-full { background: #7f8c8d; color: white; }
+        .btn-export { background: #27ae60; color: white; }
+        .btn-mute { background: var(--success); color: white; }
+        
+        #seating-chart-area { background: white; padding: 10px; position: relative; overflow: hidden; border-radius: 8px; width: 100%; box-sizing: border-box; }
+        
+        .blackboard { width: 60%; max-width: 400px; margin: 0 auto 20px; background: #2c3e50; color: white; text-align: center; padding: 10px; border-radius: 4px; font-weight: bold; font-size: 0.9rem; }
+        
+        /* グリッドを画面幅に合わせる */
+        .grid-container { 
+            display: grid; 
+            gap: 8px; 
+            justify-content: center; 
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        .seat { 
+            aspect-ratio: 2 / 1; /* 横長を維持 */
+            min-width: 0; 
+            border: 2px solid #ddd; 
+            border-radius: 6px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            text-align: center; 
+            font-size: 0.9rem; 
+            font-weight: bold; 
+            background: white; 
+            cursor: pointer; 
+            word-break: break-all; 
+            padding: 2px; 
+            box-sizing: border-box; 
+        }
+        
+        @media (max-width: 480px) {
+            .seat { font-size: 0.7rem; border-width: 1px; }
+            .grid-container { gap: 4px; }
+        }
+
+        .seat.disabled { background-color: #e0e0e0 !important; border-style: dashed; color: #aaa; }
+        .seat.priority { border-color: var(--secondary); background-color: #fff9f0; }
+        .seat.shuffling { color: var(--primary); font-size: 1.5rem; }
+
+        .flash-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; pointer-events: none; z-index: 100; }
+        .flash-active { animation: flash-white 0.6s ease-out; }
+        @keyframes flash-white { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
+
+        .seat.just-decided { animation: highlight-pop 0.8s ease-out; border-color: #ffeb3b; box-shadow: 0 0 10px #ffeb3b; z-index: 10; }
+        @keyframes highlight-pop { 0% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+        .legend { font-size: 0.75rem; text-align: center; margin-top: 15px; color: #666; }
+    </style>
+</head>
+<body>
+
+<audio id="audioDrumRoll" src="ドラムロール.mp3" preload="auto" loop></audio>
+<audio id="audioRollFinish" src="ロールの閉め.mp3" preload="auto"></audio>
+
+<div class="container">
+    <h1>席替えピーヤ</h1>
+
+    <div class="setup-section">
+        <div class="names-container">
+            <div class="input-group">
+                <label>参加者</label>
+                <textarea id="nameList" placeholder="1人1行で入力"></textarea>
+            </div>
+            <div class="input-group">
+                <label>前席希望者</label>
+                <textarea id="priorityNameList" placeholder="前方に固定したい人"></textarea>
+            </div>
+        </div>
+        
+        <div class="grid-config">
+            <div class="input-group">
+                <label>レイアウト (横 × 縦)</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="number" id="cols" value="6" min="1" onchange="createGrid()">
+                    <input type="number" id="rows" value="7" min="1" onchange="createGrid()">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>前方優先エリア行数</label>
+                <input type="number" id="frontRowLimit" value="1" min="0" onchange="createGrid()">
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-start" id="startBtn" onclick="startShuffle()">スタート！</button>
+        <button class="btn-full" onclick="toggleFullscreen()">全画面</button>
+        <button class="btn-export" onclick="exportTable()">表出力</button>
+        <button class="btn-mute" id="muteBtn" onclick="toggleMute()">🔊 音あり</button>
+    </div>
+
+    <div id="seating-chart-area">
+        <div class="flash-overlay" id="flashOverlay"></div>
+        <div class="blackboard">教壇 / 黒板</div>
+        <div id="gridContainer" class="grid-container"></div>
+        <div class="legend" id="stats"></div>
+    </div>
+</div>
+
+<script>
+    let seats = [];
+    let finalResult = [];
+    let isShuffling = false;
+    let isLocked = false;
+    let isMuted = false;
+
+    const drumRoll = document.getElementById('audioDrumRoll');
+    const rollFinish = document.getElementById('audioRollFinish');
+
+    window.onload = createGrid;
+
+    function toggleMute() {
+        isMuted = !isMuted;
+        document.getElementById('muteBtn').innerText = isMuted ? "🔇 音なし" : "🔊 音あり";
+        document.getElementById('muteBtn').style.background = isMuted ? "#e74c3c" : "#27ae60";
+    }
+
+    function createGrid() {
+        if (isLocked) return;
+        
+        const rows = parseInt(document.getElementById('rows').value) || 1;
+        const cols = parseInt(document.getElementById('cols').value) || 1;
+        
+        // 前方行数の制限（縦の行数を超えないようにする）
+        let frontLimitInput = document.getElementById('frontRowLimit');
+        let frontLimit = parseInt(frontLimitInput.value) || 0;
+        if (frontLimit > rows) {
+            frontLimit = rows;
+            frontLimitInput.value = rows;
+        }
+
+        const container = document.getElementById('gridContainer');
+        container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+        container.style.maxWidth = `${cols * 140}px`; // 広がりすぎ防止
+        container.innerHTML = '';
+        
+        seats = [];
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const idx = r * cols + c;
+                const isFront = r < frontLimit;
+                const div = document.createElement('div');
+                div.className = `seat ${isFront ? 'priority' : ''}`;
+                div.onclick = () => toggleSeat(idx);
+                container.appendChild(div);
+                seats.push({ id: idx, active: true, isFront, element: div });
+            }
+        }
+        updateStats();
+    }
+
+    function toggleSeat(id) {
+        if (isShuffling || isLocked) return;
+        seats[id].active = !seats[id].active;
+        seats[id].element.classList.toggle('disabled', !seats[id].active);
+        updateStats();
+    }
+
+    function updateStats() {
+        const activeCount = seats.filter(s => s.active).length;
+        const names = getNames();
+        document.getElementById('stats').innerText = `有効席: ${activeCount} / 人数: ${names.all.length}`;
+    }
+
+    function getNames() {
+        // 空行（空白文字だけの行）を完全に無視してカウント
+        const filterFn = n => n.trim().length > 0;
+        let reg = document.getElementById('nameList').value.split('\n').filter(filterFn).map(n => n.trim());
+        let pri = document.getElementById('priorityNameList').value.split('\n').filter(filterFn).map(n => n.trim());
+        
+        // 名前がない場合は自動で番号
+        if (reg.length === 0 && pri.length === 0) {
+            const activeCount = seats.filter(s => s.active).length;
+            for (let i = 1; i <= activeCount; i++) reg.push(i.toString());
+        }
+        
+        return { regular: reg, priority: pri, all: [...pri, ...reg] };
+    }
+
+    function startShuffle() {
+        if (isShuffling || isLocked) return;
+        const namesData = getNames();
+        const activeSeats = seats.filter(s => s.active);
+        
+        if (namesData.all.length > activeSeats.length) {
+            return alert(`席が足りません！ (人数:${namesData.all.length}人 / 席:${activeSeats.length}席)`);
+        }
+
+        isLocked = true;
+        isShuffling = true;
+        document.getElementById('startBtn').disabled = true;
+
+        if (!isMuted) { drumRoll.currentTime = 0; drumRoll.play(); }
+
+        calculatePlacement(namesData, activeSeats);
+
+        activeSeats.forEach(s => {
+            s.element.innerText = "?";
+            s.element.classList.add('shuffling');
+        });
+
+        setTimeout(() => {
+            finishShuffle(activeSeats);
+        }, 3000);
+    }
+
+    function calculatePlacement(namesData, activeSeats) {
+        finalResult = [];
+        const shuffleArr = (arr) => arr.sort(() => Math.random() - 0.5);
+
+        let pNames = shuffleArr([...namesData.priority]);
+        let rNames = shuffleArr([...namesData.regular]);
+        let fSeats = shuffleArr(activeSeats.filter(s => s.isFront));
+        let bSeats = shuffleArr(activeSeats.filter(s => !s.isFront));
+
+        while(pNames.length > 0 && fSeats.length > 0) finalResult.push({ id: fSeats.pop().id, name: pNames.pop() });
+        while(pNames.length > 0 && bSeats.length > 0) finalResult.push({ id: bSeats.pop().id, name: pNames.pop() });
+        
+        let remainingSeats = shuffleArr([...fSeats, ...bSeats]);
+        rNames.forEach((name, i) => {
+            if(remainingSeats[i]) finalResult.push({ id: remainingSeats[i].id, name });
+        });
+    }
+
+    function finishShuffle(activeSeats) {
+        drumRoll.pause();
+        if (!isMuted) { rollFinish.currentTime = 0; rollFinish.play(); }
+        document.getElementById('flashOverlay').classList.add('flash-active');
+        
+        activeSeats.forEach(s => {
+            const res = finalResult.find(r => r.id === s.id);
+            s.element.innerText = res ? res.name : "";
+            s.element.classList.remove('shuffling');
+            s.element.classList.add('just-decided');
+        });
+
+        setTimeout(() => {
+            document.getElementById('flashOverlay').classList.remove('flash-active');
+        }, 600);
+        isShuffling = false;
+    }
+
+    function toggleFullscreen() {
+        const el = document.getElementById('seating-chart-area');
+        if (!document.fullscreenElement) el.requestFullscreen().catch(() => {});
+        else document.exitFullscreen();
+    }
+
+    function exportTable() {
+        if (finalResult.length === 0) return alert("まだ席替えしていません。");
+        const rows = parseInt(document.getElementById('rows').value);
+        const cols = parseInt(document.getElementById('cols').value);
+        let table = "<table border='1' style='border-collapse:collapse;width:100%;text-align:center;'>";
+        for (let r = 0; r < rows; r++) {
+            table += "<tr>";
+            for (let c = 0; c < cols; c++) {
+                const id = r * cols + c;
+                const res = finalResult.find(x => x.id === id);
+                table += `<td style="padding:10px;">${res ? res.name : ""}</td>`;
+            }
+            table += "</tr>";
+        }
+        table += "</table>";
+        const win = window.open("", "_blank");
+        win.document.write(`<html><body><h2>席替え結果</h2>${table}</body></html>`);
+    }
+</script>
+</body>
+</html>
