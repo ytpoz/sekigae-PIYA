@@ -214,23 +214,24 @@
 
     function updateStats() {
         const activeCount = seats.filter(s => s.active).length;
-        const names = getNames(activeCount); // カウント時にも自動補完を考慮
+        const names = getNames(activeCount);
         document.getElementById('stats').innerText = `有効席: ${activeCount} / 人数: ${names.all.length}`;
     }
 
     function getNames(targetSeatCount) {
         const filterFn = n => n.trim().length > 0;
-        // トリムして空文字列を除外
         let reg = document.getElementById('nameList').value.split('\n').filter(filterFn).map(n => n.trim());
         let pri = document.getElementById('priorityNameList').value.split('\n').filter(filterFn).map(n => n.trim());
         
-        let currentTotal = reg.length + pri.length;
+        let initialUserCount = reg.length + pri.length;
 
-        // もし有効な席数に対して人数が足りない場合、数字で補完する
-        if (targetSeatCount && currentTotal < targetSeatCount) {
-            let diff = targetSeatCount - currentTotal;
-            for (let i = 1; i <= diff; i++) {
-                reg.push(i.toString());
+        // 不足分を数字で埋める
+        if (targetSeatCount && initialUserCount < targetSeatCount) {
+            let diff = targetSeatCount - initialUserCount;
+            // 開始番号を (現在入力されている人数 + 1) に設定
+            let startNum = initialUserCount + 1;
+            for (let i = 0; i < diff; i++) {
+                reg.push((startNum + i).toString());
             }
         }
         
@@ -268,9 +269,8 @@
 
     function startShuffle() {
         const activeSeats = seats.filter(s => s.active);
-        const namesData = getNames(activeSeats.length); // 席数に合わせて補完
+        const namesData = getNames(activeSeats.length);
         
-        // 逆に人数が多すぎる場合のみアラート
         if (namesData.all.length > activeSeats.length) {
             return alert(`席が足りません！ (人数:${namesData.all.length}人 / 席:${activeSeats.length}席)`);
         }
