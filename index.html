@@ -48,7 +48,7 @@
         .btn-start { background: var(--primary); color: white; }
         .btn-retry { background: var(--secondary); color: white; }
         .btn-full { background: #7f8c8d; color: white; }
-        .btn-export { background: #27ae60; color: white; display: none; } /* 初期は非表示 */
+        .btn-export { background: #27ae60; color: white; display: none; }
         .btn-mute { background: var(--success); color: white; }
         
         #seating-chart-area { background: white; padding: 10px; position: relative; overflow: hidden; border-radius: 8px; width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; }
@@ -99,11 +99,11 @@
         <div class="names-container">
             <div class="input-group">
                 <label>参加者</label>
-                <textarea id="nameList" placeholder="1人1行で入力"></textarea>
+                <textarea id="nameList" placeholder="1人1行で入力" oninput="updateStats()"></textarea>
             </div>
             <div class="input-group">
                 <label>前席希望者</label>
-                <textarea id="priorityNameList" placeholder="前方に固定したい人"></textarea>
+                <textarea id="priorityNameList" placeholder="前方に固定したい人" oninput="updateStats()"></textarea>
             </div>
         </div>
         
@@ -135,7 +135,6 @@
         <div id="gridContainer" class="grid-container"></div>
         <div class="legend" id="stats"></div>
         
-        <!-- 全画面表示時用の操作ボタン -->
         <div class="fs-controls">
             <button class="btn-start" id="fsStartBtn" onclick="handleStartClick()">スタート！</button>
             <button class="btn-full" onclick="toggleFullscreen()">解除</button>
@@ -144,7 +143,6 @@
 </div>
 
 <script>
-    // ページを離れる際の警告
     window.addEventListener('beforeunload', (e) => {
         if (isLocked) {
             e.preventDefault();
@@ -163,11 +161,8 @@
 
     window.onload = createGrid;
 
-    // 入力制限機能
     function validateNumInput(el, noZero) {
-        // 数字以外を削除
         el.value = el.value.replace(/[^0-9]/g, '');
-        // 0を不可にする場合
         if (noZero && el.value === '0') el.value = '1';
     }
 
@@ -219,18 +214,24 @@
 
     function updateStats() {
         const activeCount = seats.filter(s => s.active).length;
-        const names = getNames();
+        const names = getNames(activeCount); // カウント時にも自動補完を考慮
         document.getElementById('stats').innerText = `有効席: ${activeCount} / 人数: ${names.all.length}`;
     }
 
-    function getNames() {
+    function getNames(targetSeatCount) {
         const filterFn = n => n.trim().length > 0;
+        // トリムして空文字列を除外
         let reg = document.getElementById('nameList').value.split('\n').filter(filterFn).map(n => n.trim());
         let pri = document.getElementById('priorityNameList').value.split('\n').filter(filterFn).map(n => n.trim());
         
-        if (reg.length === 0 && pri.length === 0) {
-            const activeCount = seats.filter(s => s.active).length;
-            for (let i = 1; i <= activeCount; i++) reg.push(i.toString());
+        let currentTotal = reg.length + pri.length;
+
+        // もし有効な席数に対して人数が足りない場合、数字で補完する
+        if (targetSeatCount && currentTotal < targetSeatCount) {
+            let diff = targetSeatCount - currentTotal;
+            for (let i = 1; i <= diff; i++) {
+                reg.push(i.toString());
+            }
         }
         
         return { regular: reg, priority: pri, all: [...pri, ...reg] };
@@ -266,9 +267,10 @@
     }
 
     function startShuffle() {
-        const namesData = getNames();
         const activeSeats = seats.filter(s => s.active);
+        const namesData = getNames(activeSeats.length); // 席数に合わせて補完
         
+        // 逆に人数が多すぎる場合のみアラート
         if (namesData.all.length > activeSeats.length) {
             return alert(`席が足りません！ (人数:${namesData.all.length}人 / 席:${activeSeats.length}席)`);
         }
